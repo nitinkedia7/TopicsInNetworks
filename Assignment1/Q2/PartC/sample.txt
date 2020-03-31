@@ -1,0 +1,17 @@
+Enter the mean arrival rate: 0.03
+Enter the mean service rate: 0.02
+Enter simulation time: 35000
+
+Simulation Results:
+Total Number Of generated Passengers : 1069
+Total Number Of dropped Passengers : 0
+Average number of Passengers getting Inspected : 1.4778285714285715
+Average Response Time : 98.06585136406397
+Average Waiting Time : 49.505174035747885
+Average Number Of Passengers Waiting in queue  : 1.5103714285714285
+
+Theortical Results:
+Average number of Passengers getting Inspected : 1.4992672203224229
+Average Response Time : 99.51124144672532
+Average Waiting Time : 49.51124144672532
+Average Number Of Passengers Waiting in queue  : 1.4846116267708842
