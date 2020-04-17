@@ -22,8 +22,9 @@ class BaseSwitch {
     int outputBuffferSize;
     double packetGenProb;
     int maxTimeSlots;
-    long cumulativeLinkUtilisation; 
+    long long cumulativeLinkUtilisation; 
     double averageLinkUtilization;
+    long long cumulativePacketDelay;
     double avgPacketDelay;  
     double stddevPacketDelay;
     string outputFileName;
@@ -40,7 +41,7 @@ class BaseSwitch {
         this->packetGenProb = packetGenProb;
         this->maxTimeSlots = maxTimeSlots;
         this->cumulativeLinkUtilisation = 0;
-        this->avgPacketDelay = 0;
+        this->cumulativePacketDelay = 0;
         this->outputFileName = outputFileName;
         inputPorts.resize(n);
         outputPorts.resize(n);
@@ -51,14 +52,14 @@ class BaseSwitch {
         return rndDouble <= p;
     }    
 
-    void generateInputPackets(int slotNumber) {
+    virtual void generateInputPackets(int slotNumber) {
         for (int i = 0 ;i< numberOfPorts; i++) {
             if (inputPorts[i].size() == inputBufferSize)
                 continue;
 
             if (randomWithProb(packetGenProb)) {
             //if (1) {
-                // cout << "PACKET GEN" << endl;
+                // cout << "PACKET GEN1" << endl;
                 int targetOutputPort = rand() % numberOfPorts;
                 Packet newPacket = Packet(slotNumber,targetOutputPort);
                 inputPorts[i].push(newPacket);
@@ -85,17 +86,16 @@ class BaseSwitch {
     void metricsCalculation() {
         int noOfTransmittedPacket = transmittedPackets.size();
 
-        for(int i = 0; i < noOfTransmittedPacket; i++) {
-            avgPacketDelay += transmittedPackets[i].transmissionTime - transmittedPackets[i].arrivalTime;
+        for (int i = 0; i < noOfTransmittedPacket; i++) {
+            cumulativePacketDelay += transmittedPackets[i].transmissionTime - transmittedPackets[i].arrivalTime;
         }
-        avgPacketDelay /= noOfTransmittedPacket;
+        avgPacketDelay = ((double) cumulativePacketDelay) / noOfTransmittedPacket;
 
-        double variancePacketDelay = 0;
+        long long variancePacketDelay = 0;
         for(int i = 0 ; i < noOfTransmittedPacket; i++) {
             variancePacketDelay += pow(transmittedPackets[i].transmissionTime - transmittedPackets[i].arrivalTime - avgPacketDelay, 2);
         }
-        variancePacketDelay /= noOfTransmittedPacket;
-        stddevPacketDelay = sqrt(variancePacketDelay);
+        stddevPacketDelay = sqrt(((double)variancePacketDelay) / noOfTransmittedPacket);
 
         averageLinkUtilization = (1.0 * cumulativeLinkUtilisation) / (numberOfPorts * maxTimeSlots);
 
@@ -234,16 +234,18 @@ class SwitchISLIP : public BaseSwitch {
     : BaseSwitch(n, bufferSize, packetGenProb, maxTimeSlots, outputFileName)
     {
         inputPorts.resize(n, vector<queue<Packet>> (n));
-        inputPortsBufferUsed.resize(n, 0);
+        inputPortsBufferUsed.resize(n);
+        fill(inputPortsBufferUsed.begin(), inputPortsBufferUsed.end(), 0);
         queueType = "iSLIP";
     }
 
-    void generatePackets(int slotNumber) {
+    void generateInputPackets(int slotNumber) {
         for (int i = 0; i < numberOfPorts; i++) {
             if (inputPortsBufferUsed[i] == inputBufferSize) continue;
             
-            int gen = randomWithProb(packetGenProb);
-            if (gen) {
+            if (randomWithProb(packetGenProb)) {
+            // if (1) {
+                // cout << "PACKET GEN" << endl;
                 int targetOutputPort = rand() % outputPorts.size();
                 Packet newPacket = Packet(slotNumber, targetOutputPort);
                 inputPorts[i][targetOutputPort].push(newPacket);
@@ -359,32 +361,35 @@ void runSimulation(int n, int l, double k, double prob, int timeslot, string sch
 
 void getSimulationResult(string outputfile){
     printTableHeaders(outputfile);
+    
     // runSimulation(8, 4, 0.0, 0.5, 10000, "INQ", outputfile);
-    // for (int n = 4; n <= 16; n += 2) {
-    //     for (int l = 2; l <= 4; l++) {
-    //         runSimulation(n, l, 0.0, 0.5, 10000, "INQ", outputfile);       
-    //     }
-    // }
+    for (int n = 4; n <= 16; n += 2) {
+        for (int l = 2; l <= 4; l++) {
+            runSimulation(n, l, 0.0, 0.5, 10000, "INQ", outputfile);       
+        }
+    }
+
+    // runSimulation(8, 4, 0.6 * 8, 0.5, 10000, "KOUQ", outputfile);
+    for (int n = 4; n <= 16; n += 2) {
+        for (int l = 2; l <= 4 ; l++) {
+            for (double k = 0.6; k <= 1.0; k += 0.2) {
+                runSimulation(n, l, k*n, 0.5, 10000, "KOUQ", outputfile);
+            }
+        }
+    }
     
-    runSimulation(8, 4, 0.6 * 8, 0.5, 10000, "KOUQ", outputfile);
-    // for (int n = 4; n <= 16; n += 2){
-    //     for(int l = 2; l<=4 ; l++)
-    //         for(double k = 0.6 ; k<=1.0 ;k+=0.2){
-    //             runSimulation(n,l,k*n,0.5,10000,"KOUQ",outputfile);
-    //         }
-    // }
-    
-    // for (int n = 4; n <= 16; n += 2) {
-    //     for (int l = 2; l <= 4; l++) {
-    //         runSimulation(n, l, 0.0,0.5,10000,"iSLIP",outputfile);       
-    //     }
-    // }
+    // runSimulation(8, 4, 0.0, 0.5, 10000, "iSLIP", outputfile);
+    for (int n = 4; n <= 16; n += 2) {
+        for (int l = 2; l <= 4; l++) {
+            runSimulation(n, l, 0.0, 0.5, 10000, "iSLIP", outputfile);       
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
     srand(time(0));
     // Default values of switch parameters
-    getSimulationResult("output_KOUQ.csv");
+    getSimulationResult("output_all.csv");
     return 0;
     int switchPortCount = 8;
     int bufferSize = 4;
