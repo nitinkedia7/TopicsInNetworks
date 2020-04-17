@@ -23,9 +23,8 @@ class BaseSwitch {
     double packetGenProb;
     int maxTimeSlots;
     long cumulativeLinkUtilisation; 
-    double linkUtilization;
+    double averageLinkUtilization;
     double avgPacketDelay;  
-    double variancePacketDelay;
     double stddevPacketDelay;
     string outputFileName;
     string queueType;
@@ -41,35 +40,41 @@ class BaseSwitch {
         this->packetGenProb = packetGenProb;
         this->maxTimeSlots = maxTimeSlots;
         this->cumulativeLinkUtilisation = 0;
+        this->avgPacketDelay = 0;
         this->outputFileName = outputFileName;
+        inputPorts.resize(n);
+        outputPorts.resize(n);
     }
     
-    int randomWithProb(double p) {
+    bool randomWithProb(double p) {
         double rndDouble = (double) rand() / RAND_MAX;
         return rndDouble <= p;
     }    
 
     void generateInputPackets(int slotNumber) {
-        for (auto port : inputPorts) {
-            if (port.size() == inputBufferSize)
+        for (int i = 0 ;i< numberOfPorts; i++) {
+            if (inputPorts[i].size() == inputBufferSize)
                 continue;
-            
-            int gen = randomWithProb(packetGenProb);
-            if (gen) {
-                int targetOutputPort = rand()% (int)(outputPorts.size());
+
+            if (randomWithProb(packetGenProb)) {
+            //if (1) {
+                // cout << "PACKET GEN" << endl;
+                int targetOutputPort = rand() % numberOfPorts;
                 Packet newPacket = Packet(slotNumber,targetOutputPort);
-                port.push(newPacket);
+                inputPorts[i].push(newPacket);
             }
         }
     }
 
     virtual void schedule() {
+        cout << "ERROR : VIRTUAL SCHEDULE RAN" << endl;
         // Dummy virtual function to be defined for each type of queue
     }
 
     void transmission(int slotNumber) {
         for (int i = 0; i < outputPorts.size(); i++) {
             if (outputPorts[i].empty()) continue;
+            // cout << "PACKET TRANSMITTED" << endl;
             Packet packet = outputPorts[i].front();
             packet.transmissionTime = slotNumber;
             transmittedPackets.push_back(packet);
@@ -79,26 +84,30 @@ class BaseSwitch {
     
     void metricsCalculation() {
         int noOfTransmittedPacket = transmittedPackets.size();
-        
+
         for(int i = 0; i < noOfTransmittedPacket; i++) {
             avgPacketDelay += transmittedPackets[i].transmissionTime - transmittedPackets[i].arrivalTime;
         }
         avgPacketDelay /= noOfTransmittedPacket;
 
+        double variancePacketDelay = 0;
         for(int i = 0 ; i < noOfTransmittedPacket; i++) {
             variancePacketDelay += pow(transmittedPackets[i].transmissionTime - transmittedPackets[i].arrivalTime - avgPacketDelay, 2);
         }
         variancePacketDelay /= noOfTransmittedPacket;
         stddevPacketDelay = sqrt(variancePacketDelay);
 
-        linkUtilization = cumulativeLinkUtilisation / (numberOfPorts * maxTimeSlots);
+        averageLinkUtilization = (1.0 * cumulativeLinkUtilisation) / (numberOfPorts * maxTimeSlots);
+
+        cout<< noOfTransmittedPacket << " : " << avgPacketDelay << " : " << stddevPacketDelay << " : " << averageLinkUtilization <<endl;
     }
 
-    virtual void printMetrics() {
+
+    void printMetrics() {
         ofstream fout;
-        fout.open(outputFileName);
-        fout << numberOfPorts << "," << packetGenProb << "," << queueType << ",";
-        fout << avgPacketDelay << "," << stddevPacketDelay << "," << linkUtilization << ",Not Applicable" << endl;
+        fout.open(outputFileName, ios::app);
+        fout << numberOfPorts << "," << packetGenProb << "," << queueType << "," << inputBufferSize << "," << "NA" << "," ;
+        fout << avgPacketDelay << "," << stddevPacketDelay << "," << averageLinkUtilization << "," << "NA" << endl;
         fout.close();
     }
 
@@ -120,6 +129,7 @@ class INQ : public BaseSwitch {
         }
 
     void schedule() {
+        // cout << "INQ Schedule" << endl;
         vector<vector<int>> options(numberOfPorts);
     
         // For each output port, find the input ports that target it
@@ -135,7 +145,7 @@ class INQ : public BaseSwitch {
         for (int i = 0; i < numberOfPorts; i++) {
             if (options[i].size() == 0) continue;
             int j = rand() % options[i].size();
-            inputOutputMapping[j] = i;    
+            inputOutputMapping[options[i][j]] = i;    
         }
         options.clear();
         
@@ -156,7 +166,7 @@ class INQ : public BaseSwitch {
                 cumulativeLinkUtilisation++;
             }
         }
-    } 
+    }
 };
 
 class KOUQ : public BaseSwitch {
@@ -170,30 +180,30 @@ class KOUQ : public BaseSwitch {
         this->K = K;
         this->dropOutputPort = 0;
         this->queueType = "KOUQ";
+        this->outputBuffferSize = bufferSize;
     }
 
     void schedule(){
-        // vector<vector<int>> options(numberOfPorts);
         vector<vector<Packet>> options(numberOfPorts);
         
         // For each output port, find the input ports that target it
-        for (auto inputPort : inputPorts) {
-            if (inputPort.empty()) continue;
-            Packet headOfLine = inputPort.front();
-            inputPort.pop();
+        for (int i = 0; i < numberOfPorts; i++){
+            if (inputPorts[i].empty()) continue;
+            Packet headOfLine = inputPorts[i].front();
+            inputPorts[i].pop();
             int outputPort = headOfLine.outputPort;
             options[outputPort].push_back(headOfLine); 
         }
         
-         // Now, each output port randomly selects atmost K packets
+        // Now, each output port randomly selects atmost K packets
         for (int i = 0; i < numberOfPorts; i++) {
             if (options[i].size() > K){
                 this->dropOutputPort++;
                 random_shuffle(options[i].begin(),options[i].end());
             }
             for(int j = 0; j < min(K,(int) options[i].size());j++){
-                if(outputPorts[i].size()== outputBuffferSize)
-                    break;
+                // if(outputPorts[i].size()== outputBuffferSize)
+                //     break;
                 cumulativeLinkUtilisation++;
                 outputPorts[i].push(options[i][j]);
             }   
@@ -202,14 +212,15 @@ class KOUQ : public BaseSwitch {
     }
 
     void calcDropprobability() {
-        dropProbablity = dropOutputPort / (numberOfPorts * maxTimeSlots);
+        dropProbablity = (1.0 * dropOutputPort) / (numberOfPorts * maxTimeSlots);
     }
 
     void printMetrics() {
         ofstream fout;
-        fout.open(outputFileName);
+        fout.open(outputFileName, ios::app);
         fout << numberOfPorts << "," << packetGenProb << "," << queueType << ",";
-        fout << avgPacketDelay << "," << stddevPacketDelay << "," << linkUtilization << "," << dropProbablity << endl;
+        fout << inputBufferSize << "," << K << ",";
+        fout << avgPacketDelay << "," << stddevPacketDelay << "," << averageLinkUtilization << "," << dropProbablity << endl;
         fout.close();
     }
 };
@@ -316,27 +327,30 @@ class SwitchISLIP : public BaseSwitch {
 
 void printTableHeaders(string outputFileName) {
     ofstream fout;
-    fout.open(outputFileName);
-    fout << "N,p,Queue Type,Average Packet Delay, Std. Dev. of Packet Delay, Average Link Utilisation,KOUQ Drop Probability" << endl;
+    fout.open(outputFileName, ios::trunc);
+    fout << "Number of Ports,Packet Generation Prob,Queue Type,Input Buffer Size,Knockout,Average Packet Delay,Std. Dev. of Packet Delay,Average Link Utilisation,KOUQ Drop Probability" << endl;
     fout.close();
 }
 
-void runSimulation(int n = 8, int l = 4, double k = 0.6, double prob = 0.5, int timeslot = 10000, string scheduleType, string outputFile) {
+void runSimulation(int n, int l, double k, double prob, int timeslot, string scheduleType, string outputFile) {
     if (scheduleType == "INQ") {
-        INQ switchInstance(n, l, prob, timeslot ,outputFile);
+        INQ switchInstance(n, l, prob, timeslot, outputFile);
         switchInstance.run();
         switchInstance.metricsCalculation();
+        switchInstance.printMetrics();
     }
     else if (scheduleType == "KOUQ") {
-        KOUQ switchInstance(n, l, prob, timeslot, k,outputFile);
+        KOUQ switchInstance(n, l, prob, timeslot, k, outputFile);
         switchInstance.run();
         switchInstance.metricsCalculation();
         switchInstance.calcDropprobability();
+        switchInstance.printMetrics();
     }
     else if (scheduleType == "iSLIP") {
         SwitchISLIP switchInstance(n, l, prob, timeslot, outputFile);
         switchInstance.run();
         switchInstance.metricsCalculation();
+        switchInstance.printMetrics();
     }
     else {
         cout << "ERROR: Invalid scheduling type " << scheduleType << endl;
@@ -345,30 +359,32 @@ void runSimulation(int n = 8, int l = 4, double k = 0.6, double prob = 0.5, int 
 
 void getSimulationResult(string outputfile){
     printTableHeaders(outputfile);
-    for (int n = 4; n <= 16; n += 2) {
-        for (int l = 2; l <= 4; l++) {
-            runSimulation(n, l, 0.0, 0.5, 10000, "INQ", outputfile);       
-        }
-    }
+    // runSimulation(8, 4, 0.0, 0.5, 10000, "INQ", outputfile);
+    // for (int n = 4; n <= 16; n += 2) {
+    //     for (int l = 2; l <= 4; l++) {
+    //         runSimulation(n, l, 0.0, 0.5, 10000, "INQ", outputfile);       
+    //     }
+    // }
     
-    for (int n = 4; n <= 16; n += 2){
-        for(int l = 2; l<=4 ; l++)
-            for(double k = 0.6 ; k<=1.0 ;k+=0.2){
-                runSimulation(n,l,0.0,0.5,10000,"KOUQ",outputfile);
-            }
-    }
+    runSimulation(8, 4, 0.6 * 8, 0.5, 10000, "KOUQ", outputfile);
+    // for (int n = 4; n <= 16; n += 2){
+    //     for(int l = 2; l<=4 ; l++)
+    //         for(double k = 0.6 ; k<=1.0 ;k+=0.2){
+    //             runSimulation(n,l,k*n,0.5,10000,"KOUQ",outputfile);
+    //         }
+    // }
     
-    for (int n = 4; n <= 16; n += 2) {
-        for (int l = 2; l <= 4; l++) {
-            runSimulation(n, l, 0.0,0.5,10000,"iSLIP",outputfile);       
-        }
-    }
+    // for (int n = 4; n <= 16; n += 2) {
+    //     for (int l = 2; l <= 4; l++) {
+    //         runSimulation(n, l, 0.0,0.5,10000,"iSLIP",outputfile);       
+    //     }
+    // }
 }
 
 int main(int argc, char *argv[]) {
     srand(time(0));
     // Default values of switch parameters
-    getSimulationResult("output.csv");
+    getSimulationResult("output_KOUQ.csv");
     return 0;
     int switchPortCount = 8;
     int bufferSize = 4;
