@@ -79,6 +79,7 @@ class BaseSwitch {
     }
 
     void transmission(int slotNumber) {
+        // cout << 'T';
         for (int i = 0; i < outputPorts.size(); i++) {
             if (outputPorts[i].empty()) continue;
             // cout << "PACKET TRANSMITTED" << endl;
@@ -208,7 +209,7 @@ class KOUQ : public BaseSwitch {
         
         // Now, each output port randomly selects atmost K packets
         for (int i = 0; i < numberOfPorts; i++) {
-            if (options[i].size() > K){
+            if (options[i].size() > K) {
                 this->dropOutputPort++;
                 random_shuffle(options[i].begin(),options[i].end());
                 dropPacketCount += (int)options[i].size() - K;
@@ -248,6 +249,7 @@ class SwitchISLIP : public BaseSwitch {
     SwitchISLIP(int n, int bufferSize, double packetGenProb, int maxTimeSlots, string outputFileName)
     : BaseSwitch(n, bufferSize, packetGenProb, maxTimeSlots, outputFileName)
     {
+        inputPorts.clear();
         inputPorts.resize(n, vector<queue<Packet>> (n));
         inputPortsBufferUsed.resize(n);
         fill(inputPortsBufferUsed.begin(), inputPortsBufferUsed.end(), 0);
@@ -255,6 +257,7 @@ class SwitchISLIP : public BaseSwitch {
     }
 
     void generateInputPackets(int slotNumber) {
+        // cout << "G" << endl; 
         for (int i = 0; i < numberOfPorts; i++) {
             if (inputPortsBufferUsed[i] == inputBufferSize){
                 dropPacketCount++;
@@ -271,6 +274,7 @@ class SwitchISLIP : public BaseSwitch {
     }
 
     void schedule() {
+        // cout << 'S';
         vector<int> inputOutputMapping(numberOfPorts, -1); 
         vector<vector<int>> v(numberOfPorts, vector<int> (numberOfPorts, 0));
         for (int ip = 0; ip < numberOfPorts; ip++) {
@@ -290,7 +294,7 @@ class SwitchISLIP : public BaseSwitch {
             for (int op = 0; op < numberOfPorts; op++) {
                 if (!opAvailable[op]) continue;
                 for (int ip = 0; ip < numberOfPorts; ip++) {
-                    if (!ipAvailable[op]) continue;
+                    if (!ipAvailable[ip]) continue;
                     if (v[ip][op] == 1) {
                         grantMap[op] = ip;
                         break;
@@ -380,20 +384,20 @@ void getGraphs() {
 
     // // 1. Change N
     string outputFile = "varyPortCount.csv";
-    // printTableHeaders(outputFile);
+    printTableHeaders(outputFile);
     // for (int i = 0; i < 3; i++) {
-    //     for (int n = 4; n <= 32; n += 2) {
-    //         runSimulation(n, 4, 0.6, 0.5, 10000, queueType[i], outputFile);
-    //     }    
+        for (int n = 4; n <= 32; n += 2) {
+            runSimulation(n, 4, 0.6, 0.5, 10000, "iSLIP", outputFile);
+        }    
     // }
 
-    // // 2. Change L
-    // outputFile = "varyBufferSize.csv";
-    // printTableHeaders(outputFile);
+    // 2. Change L
+    outputFile = "varyBufferSize.csv";
+    printTableHeaders(outputFile);
     // for (int i = 0; i < 3; i++) {
-    //     for (int l = 1; l <= 4; l++) {
-    //         runSimulation(8, l, 0.6, 0.5, 10000, queueType[i], outputFile);
-    //     }
+        for (int l = 1; l <= 4; l++) {
+            runSimulation(8, l, 0.6, 0.5, 10000, "iSLIP", outputFile);
+        }
     // }
 
     // // 3. Change K in KOUQ only
@@ -406,11 +410,11 @@ void getGraphs() {
     // 4. Change p
     outputFile = "varyGenProb.csv";
     printTableHeaders(outputFile);
-    for (int i = 0; i < 3; i++) {
-        for (double p = 0.095; p <= 1.0; p += 0.1) {
-            runSimulation(8, 4, 0.6, p, 10000, queueType[i], outputFile);
+    // for (int i = 0; i < 3; i++) {
+        for (double p = 0.1; p <= 1.0; p += 0.1) {
+            runSimulation(8, 4, 0.6, p, 10000, "iSLIP", outputFile);
         }
-    }
+    // }
     return;
 }
 
