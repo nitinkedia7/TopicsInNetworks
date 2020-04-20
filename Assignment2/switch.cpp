@@ -68,17 +68,17 @@ class BaseSwitch {
         queue and push it into the that buffer */ 
     virtual void generateInputPackets(int slotNumber) {
         for (int i = 0 ;i< numberOfPorts; i++) {
+            if (!randomWithProb(packetGenProb)) continue;
+            
             // This input buffer is already full, no need to generate a packet
             if (inputPorts[i].size() == inputBufferSize){
                 dropPacketCount++;
                 continue;   
             }
-            if (randomWithProb(packetGenProb)) {
-                // Output port is to be uniformly assigned to each packet
-                int targetOutputPort = rand() % numberOfPorts; 
-                Packet newPacket = Packet(slotNumber,targetOutputPort);
-                inputPorts[i].push(newPacket);
-            }
+            // Output port is to be uniformly assigned to each packet
+            int targetOutputPort = rand() % numberOfPorts; 
+            Packet newPacket = Packet(slotNumber,targetOutputPort);
+            inputPorts[i].push(newPacket);
         }
     }
 
@@ -284,19 +284,18 @@ class SwitchISLIP : public BaseSwitch {
     /* Need a new generator function as input buffer structure has changed */
     void generateInputPackets(int slotNumber) {
         for (int i = 0; i < numberOfPorts; i++) {
+            if (!randomWithProb(packetGenProb)) continue;
+            
             // No need to generate packet if input buffer is already full
             if (inputPortsBufferUsed[i] == inputBufferSize){
                 dropPacketCount++;
                 continue;   
             }
-            
-            if (randomWithProb(packetGenProb)) {
-                int targetOutputPort = rand() % outputPorts.size();
-                Packet newPacket = Packet(slotNumber, targetOutputPort);
-                inputPorts[i][targetOutputPort].push(newPacket);
-                // Effectively pair (input port, output port) decides a queue
-                inputPortsBufferUsed[i]++;
-            }
+            int targetOutputPort = rand() % outputPorts.size();
+            Packet newPacket = Packet(slotNumber, targetOutputPort);
+            inputPorts[i][targetOutputPort].push(newPacket);
+            // Effectively pair (input port, output port) decides a queue
+            inputPortsBufferUsed[i]++;
         }
     }
 
@@ -391,14 +390,15 @@ void printTableHeaders(string outputFileName) {
 
 // function to run a given instance of the simulation with the desired value
 void runSimulation(int n, int l, double k, double prob, int timeslot, string scheduleType, string outputFile) {
-    
-    /*  create a switch instance of appropriate type
-        call the run function to run simulation
-        calculate the results according to the metrics
-        print the obtained results
-    */
-    
-    
+    cout << "Simulating using parameters: " << endl; 
+    cout << "Switch Port Count: " << n << endl;
+    cout << "Buffer Size: " << l << endl;
+    cout << "Packet Generation Probability: " << prob << endl;
+    cout << "Queue type: " << scheduleType << endl;
+    if (scheduleType == "KOUQ") cout << "Knockout ratio: " << k << endl;
+    cout << "Rutime: " << timeslot << endl;
+    cout << "Output file: " << outputFile << endl;   
+
     if (scheduleType == "INQ") {
         INQ switchInstance(n, l, prob, timeslot, outputFile);
         switchInstance.run();
@@ -420,7 +420,9 @@ void runSimulation(int n, int l, double k, double prob, int timeslot, string sch
     }
     else {
         cout << "ERROR: Invalid scheduling type " << scheduleType << endl;
+        return;
     }
+    cout << "Simulation done, results saved." << endl;
 }
 
 // function to genrate values of graph used for generating report
@@ -470,7 +472,7 @@ int main(int argc, char *argv[]) {
     int bufferSize = 4;
     double packetGenProb = 0.5;
     string queue = "INQ";
-    int knockout = 0.6 * switchPortCount;
+    double knockout = 0.6;
     string outputFile = "output.csv";
     int maxTimeSlots = 10000;
     bool getAllGraphs = 0;
@@ -490,7 +492,7 @@ int main(int argc, char *argv[]) {
             queue = argv[i+1];
         }
         else if (parameter == "K") {
-            knockout = atoi(argv[i+1]);
+            knockout = atof(argv[i+1]);
         }
         else if (parameter == "out") {
             outputFile = argv[i+1];
